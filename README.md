@@ -26,7 +26,7 @@ logseeker -s "begin" -e "end" -n 1 -f " " test-access.log
 
 例如:
 ```shell
-$ time ./logseeker -s '2019-04-14T02:11:45.128Z' -e '2019-04-14T02:12:45.128Z' -n 3 test-access.log | wc -l
+$ ./logseeker -s '2019-04-14T02:11:45.128Z' -e '2019-04-14T02:12:45.128Z' -n 3 test-access.log | wc -l
 
 6337
 
