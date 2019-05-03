@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/csv"
+	"encoding/json"
 	"flag"
 	"io"
 	"os"
@@ -172,7 +173,7 @@ func (logSeeker *LogSeeker) SeekLinePosition(pos int64) (offset int64, err error
 }
 
 //BSearchBegin search the begin pos
-func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue string, fieldSep rune, fieldIndex int) (offset int64, err error) {
+func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue string, fieldSep rune, fieldIndex int, jsonField string) (offset int64, err error) {
 
 	if begin > end {
 		//not found
@@ -181,7 +182,7 @@ func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue stri
 
 	offset, err = logSeeker.SeekLinePosition(begin)
 
-	field, err := logSeeker.readLineField(offset, fieldSep, fieldIndex)
+	field, err := logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
 
 	if startValue < field {
 		//found
@@ -190,7 +191,7 @@ func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue stri
 
 	offset, err = logSeeker.SeekLinePosition(end - 2)
 
-	field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex)
+	field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
 
 	// fmt.Printf("scan end  %d-%d ,%s %d\n", end, offset, field, fieldIndex)
 
@@ -212,14 +213,14 @@ func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue stri
 			break
 		}
 
-		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex)
+		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
 		// fmt.Printf("scan begin %d, %d mid:%d\n", begin, end, mid)
 
 		if field >= startValue && offset == begin {
 			return
 		}
 
-		if offset == begin {
+		if offset == begin && field >= startValue {
 			offset = lastOffset
 			return
 		}
@@ -238,7 +239,7 @@ func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue stri
 }
 
 //BSearchEnd search the end pos
-func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, fieldSep rune, fieldIndex int) (offset int64, err error) {
+func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, fieldSep rune, fieldIndex int, jsonField string) (offset int64, err error) {
 
 	if begin > end {
 		//not found
@@ -247,7 +248,7 @@ func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, 
 
 	offset, err = logSeeker.SeekLinePosition(end - 2)
 
-	field, err := logSeeker.readLineField(offset, fieldSep, fieldIndex)
+	field, err := logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
 
 	// fmt.Printf("scan end  %d-%d ,%s %d\n", end, offset, field, fieldIndex)
 
@@ -269,7 +270,7 @@ func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, 
 			break
 		}
 
-		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex)
+		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
 		// fmt.Printf("scan begin %d, %d mid:%d\n", begin, end, mid)
 
 		if field < endValue && offset == begin {
@@ -294,7 +295,12 @@ func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, 
 	return lastOffset, nil
 }
 
-func (logSeeker *LogSeeker) readLineField(offset int64, fieldSep rune, fieldIndex int) (field string, err error) {
+func (logSeeker *LogSeeker) readLineField(offset int64, fieldSep rune, fieldIndex int, jsonField string) (field string, err error) {
+
+	// read json
+	if jsonField != "" {
+		return logSeeker.readLineJSONField(offset, jsonField)
+	}
 	originPos, err := logSeeker.Tell()
 	defer func() {
 		logSeeker.reader = nil
@@ -312,6 +318,34 @@ func (logSeeker *LogSeeker) readLineField(offset int64, fieldSep rune, fieldInde
 	}
 	if fieldIndex <= 0 && len(fields) >= fieldIndex*-1+1 {
 		return fields[len(fields)-fieldIndex*-1-1], nil
+	}
+	return "", nil
+}
+
+//readLineJSONField read json format log
+func (logSeeker *LogSeeker) readLineJSONField(offset int64, jsonField string) (field string, err error) {
+	originPos, err := logSeeker.Tell()
+	defer func() {
+		logSeeker.reader = nil
+		logSeeker.Seek(originPos, os.SEEK_SET)
+	}()
+
+	logSeeker.Seek(offset, os.SEEK_SET)
+	logSeeker.BeginReader()
+	content, err := logSeeker.reader.ReadString(byte('\n'))
+	// fmt.Printf("readline: %s", content)
+	var jsonMap map[string]interface{}
+	// fields, err := logSeeker.getFields(fieldSep, content)
+
+	err = json.Unmarshal([]byte(content), &jsonMap)
+
+	if err != nil {
+		return
+	}
+
+	if v, ok := jsonMap[jsonField]; ok {
+		// fmt.Printf("time: %s\n", v)
+		return v.(string), nil
 	}
 	return "", nil
 }
@@ -348,6 +382,8 @@ func main() {
 	endValue := flag.String("e", "", "end value")
 	fieldSep := flag.String("f", " ", "field separator")
 	fieldIndex := flag.Int("n", 1, "field index")
+	jsonField := flag.String("j", "", "json field key")
+
 	flag.Parse()
 
 	if *startValue == "" || *endValue == "" {
@@ -371,9 +407,9 @@ func main() {
 
 	end, _ := logSeeker.file.Seek(0, os.SEEK_END)
 
-	offset, _ := logSeeker.BSearchBegin(0, end, *startValue, filedSeperator, *fieldIndex)
+	offset, _ := logSeeker.BSearchBegin(0, end, *startValue, filedSeperator, *fieldIndex, *jsonField)
 
-	endOffset, _ := logSeeker.BSearchEnd(offset, end, *endValue, filedSeperator, *fieldIndex)
+	endOffset, _ := logSeeker.BSearchEnd(offset, end, *endValue, filedSeperator, *fieldIndex, *jsonField)
 
 	logSeeker.Seek(offset, os.SEEK_SET)
 
