@@ -337,6 +337,12 @@ func (logSeeker *LogSeeker) readLineJSONField(offset int64, jsonField string) (f
 	var jsonMap map[string]interface{}
 	// fields, err := logSeeker.getFields(fieldSep, content)
 
+	indexBegin := strings.Index(content, "{")
+	if indexBegin > 0 {
+		content = content[indexBegin:]
+	}
+	// fmt.Printf("json content:%s", content)
+
 	err = json.Unmarshal([]byte(content), &jsonMap)
 
 	if err != nil {
