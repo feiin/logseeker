@@ -207,20 +207,20 @@ func (logSeeker *LogSeeker) BSearchBegin(begin int64, end int64, startValue stri
 	for end > begin {
 
 		offset, err = logSeeker.SeekLinePosition(mid)
-		// fmt.Printf("scan %d \n", offset)
-		if lastOffset > 0 && lastOffset == offset {
+		// fmt.Printf("offset:lastOffset %d %d \n", offset, lastOffset)
+		if lastOffset >= 0 && lastOffset == offset {
 			// repeat find the same row
 			break
 		}
 
 		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
-		// fmt.Printf("scan begin %d, %d mid:%d\n", begin, end, mid)
+		// fmt.Printf("scan-b %s, begin %d, %d mid:%d\n", field, begin, end, mid)
 
-		if field >= startValue && offset == begin {
+		if field < startValue && offset == begin {
 			return
 		}
 
-		if offset == begin && field >= startValue {
+		if offset == begin {
 			offset = lastOffset
 			return
 		}
@@ -264,21 +264,20 @@ func (logSeeker *LogSeeker) BSearchEnd(begin int64, end int64, endValue string, 
 	for end > begin {
 
 		offset, err = logSeeker.SeekLinePosition(mid)
-		// fmt.Printf("scan %d \n", offset)
-		if lastOffset > 0 && lastOffset == offset {
+		// fmt.Printf("offset:lastOffset %d %d \n", offset, lastOffset)
+		if lastOffset >= 0 && lastOffset == offset {
 			// repeat find the same row
 			break
 		}
 
 		field, err = logSeeker.readLineField(offset, fieldSep, fieldIndex, jsonField)
-		// fmt.Printf("scan begin %d, %d mid:%d\n", begin, end, mid)
+		// fmt.Printf("scan %s begin %d offset %d,end:%d mid:%d\n", field, begin, offset, end, mid)
 
-		if field < endValue && offset == begin {
+		if field <= endValue && offset == begin {
 			return
 		}
 
 		if offset == begin {
-			offset = lastOffset
 			return
 		}
 
@@ -414,8 +413,7 @@ func main() {
 	end, _ := logSeeker.file.Seek(0, os.SEEK_END)
 
 	offset, _ := logSeeker.BSearchBegin(0, end, *startValue, filedSeperator, *fieldIndex, *jsonField)
-
-	endOffset, _ := logSeeker.BSearchEnd(offset, end, *endValue, filedSeperator, *fieldIndex, *jsonField)
+	endOffset, err := logSeeker.BSearchEnd(offset, end, *endValue, filedSeperator, *fieldIndex, *jsonField)
 
 	logSeeker.Seek(offset, os.SEEK_SET)
 
