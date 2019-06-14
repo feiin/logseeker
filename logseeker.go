@@ -69,6 +69,7 @@ func (logSeeker *LogSeeker) getFields(fieldSep rune, content string) (fields []s
 	r := csv.NewReader(strings.NewReader(content))
 	r.Comma = fieldSep
 	fields, err = r.Read()
+	// fmt.Printf("ddd %v\n", fields)
 
 	return fields, nil
 
@@ -78,9 +79,8 @@ func (logSeeker *LogSeeker) getFieldsByRegex(fieldSep rune, content string) (fie
 
 	r := regexp.MustCompile(`[^\s"']+|"([^"]*)"|'([^']*)`)
 
-	// fmt.Printf("ddd %v\n", r.FindAllStringSubmatch(content, -1)[1])
 	fields = r.FindAllString(content, -1)
-
+	// fmt.Printf("ddd %v\n", fields)
 	// fields = strings.Split(content, " ")
 	return fields, nil
 
@@ -315,11 +315,14 @@ func (logSeeker *LogSeeker) readLineField(offset int64, fieldSep rune, fieldInde
 	// fmt.Printf("readline: %s", content)
 	fields, err := logSeeker.getFields(fieldSep, content)
 
+	// fields, err := logSeeker.getFieldsByRegex(fieldSep, content)
+	// fmt.Printf("readline: %s", fields[fieldIndex-1])
+
 	if len(fields) >= fieldIndex && fieldIndex > 0 {
-		return fields[fieldIndex-1], nil
+		return strings.Trim(fields[fieldIndex-1], "'"), nil
 	}
 	if fieldIndex <= 0 && len(fields) >= fieldIndex*-1+1 {
-		return fields[len(fields)-fieldIndex*-1-1], nil
+		return strings.Trim(fields[len(fields)-fieldIndex*-1-1], "'"), nil
 	}
 	return "", nil
 }
@@ -362,7 +365,7 @@ func (logSeeker *LogSeeker) readLineJSONField(offset int64, jsonField string) (f
 //printRangeLines print lines
 func printRangeLines(logSeeker *LogSeeker, filedSeperator rune, fieldIndex int, startOffset int64, endOffset int64, done chan bool) {
 
-	f := bufio.NewWriterSize(os.Stdout, 1024*20)
+	f := bufio.NewWriterSize(os.Stdout, 1024*4)
 
 	defer func() {
 		f.Flush()
@@ -421,8 +424,9 @@ func main() {
 
 	logSeeker.Seek(offset, os.SEEK_SET)
 
-	logSeeker.BeginReaderSize(20 * 1024)
+	logSeeker.BeginReaderSize(4 * 1024)
 
+	// fmt.Printf("offset endOffset %d, %d", offset, endOffset)
 	done := make(chan bool)
 	go printRangeLines(logSeeker, filedSeperator, *fieldIndex, offset, endOffset, done)
 
